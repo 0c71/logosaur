@@ -1,5 +1,7 @@
 # logosaur 🦖
 
+[![npm](https://img.shields.io/npm/v/logosaur?color=af5fd7)](https://www.npmjs.com/package/logosaur)
+[![CI](https://github.com/0c71/logosaur/actions/workflows/ci.yml/badge.svg)](https://github.com/0c71/logosaur/actions/workflows/ci.yml)
 ![License: MIT](https://img.shields.io/badge/license-MIT-5fffd7)
 ![Dependencies: 0](https://img.shields.io/badge/dependencies-0-d7ff87)
 ![Built for Bun](https://img.shields.io/badge/built%20for-bun-ff5f87)
