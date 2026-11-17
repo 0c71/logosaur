@@ -11,7 +11,9 @@ const at = new Date("2026-11-17T19:02:03Z");
 // a logger writing into an array, plain, on a fixed UTC clock
 const make = (options: Options = {}) => {
   const lines: string[] = [];
-  const output = { write: (chunk: string) => lines.push(chunk.replace(/\n$/, "")) };
+  const output = {
+    write: (chunk: string) => lines.push(chunk.replace(/\n$/, "")),
+  };
   const logger = createLogger({
     color: false,
     timeZone: "UTC",
@@ -40,7 +42,9 @@ describe("formatValue", () => {
 
 describe("pairs", () => {
   test("flattens nested objects and drops empty values", () => {
-    expect(pairs({ a: { b: 1, c: null }, d: undefined, e: [1, null, 2] })).toEqual([
+    expect(
+      pairs({ a: { b: 1, c: null }, d: undefined, e: [1, null, 2] }),
+    ).toEqual([
       ["a.b", 1],
       ["e", [1, 2]],
     ]);
@@ -67,9 +71,9 @@ describe("pairs", () => {
     const replacer = (key: string, value: unknown) =>
       key === "dino" ? (value as { name: string }).name : value;
 
-    expect(pairs({ pen: { dino: { name: "rex", teeth: 60 } } }, replacer)).toEqual([
-      ["pen.dino", "rex"],
-    ]);
+    expect(
+      pairs({ pen: { dino: { name: "rex", teeth: 60 } } }, replacer),
+    ).toEqual([["pen.dino", "rex"]]);
   });
 });
 
@@ -111,7 +115,10 @@ describe("text", () => {
     logger.with({ pen: 7 }).warn("loose", { species: "raptor" });
     logger.info("calm");
 
-    expect(lines).toEqual(["WRN loose app=park pen=7 species=raptor", "INF calm app=park"]);
+    expect(lines).toEqual([
+      "WRN loose app=park pen=7 species=raptor",
+      "INF calm app=park",
+    ]);
   });
 
   test("time zone", () => {
@@ -162,7 +169,10 @@ describe("colors from the environment", () => {
     process.env.FORCE_COLOR = "1";
     const lines: string[] = [];
 
-    createLogger({ output: { write: (c: string) => lines.push(c) }, time: false }).info("hi");
+    createLogger({
+      output: { write: (c: string) => lines.push(c) },
+      time: false,
+    }).info("hi");
 
     expect(lines[0]).toContain("\x1b[");
   });
@@ -172,7 +182,10 @@ describe("formats", () => {
   test("json keeps nested fields", () => {
     const { lines, logger } = make({ format: "json", prefix: "nest" });
 
-    logger.info("hatched", { egg: { size: "large" }, err: new Error("cracked") });
+    logger.info("hatched", {
+      egg: { size: "large" },
+      err: new Error("cracked"),
+    });
 
     expect(JSON.parse(lines[0] ?? "")).toEqual({
       time: "2026-11-17T19:02:03.000Z",
@@ -219,7 +232,9 @@ describe("file", () => {
 
 describe("fatal", () => {
   test("logs, then exits with code 1", () => {
-    const exit = spyOn(process, "exit").mockImplementation((() => undefined) as never);
+    const exit = spyOn(process, "exit").mockImplementation(
+      (() => undefined) as never,
+    );
 
     try {
       const { lines, logger } = make({ time: false });

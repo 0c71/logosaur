@@ -1,59 +1,57 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
-/** The log levels, quietest first. */
-type Level = "debug" | "info" | "warn" | "error" | "fatal";
-
-/** How each line is written. */
+// how each line is written
 type Format = "text" | "json" | "logfmt";
 
-/** Anything with a `write` method, like `process.stderr`. */
+// anything with a write method, like process.stderr
 interface Writer {
   write(chunk: string): unknown;
   isTTY?: boolean;
 }
 
-/** Turns a field into what gets logged, at any depth. */
+// reshapes a field before it is logged, at any depth
 type Replacer = (key: string, value: unknown) => unknown;
 
 interface Options {
-  /** The quietest level that gets through. Default `"info"`. */
+  // the quietest level that gets through (default "info")
   level?: Level;
-  /** Shown before every message, as `prefix:`. */
+  // shown before every message, as "prefix:"
   prefix?: string;
-  /** Fields added to every line. */
+  // added to every line
   fields?: object;
-  /** Show the time on text lines. Default `true`. */
+  // show the time on text lines (default true)
   time?: boolean;
-  /** An IANA time zone for the clock, like `"America/New_York"`. Default: local. */
+  // an IANA time zone for the clock, like "America/New_York" (default: local)
   timeZone?: string;
-  /** `"text"` (default), `"json"` or `"logfmt"`. */
+  // "text" (default), "json" or "logfmt"
   format?: Format;
-  /** Force colors on or off. Default: on for a terminal, off with `NO_COLOR`. */
+  // force colors on or off (default: on for a terminal, off with NO_COLOR)
   color?: boolean;
-  /** Where lines go. Default `process.stderr`. */
+  // where lines go (default process.stderr)
   output?: Writer;
-  /** Also append every line, without colors, to this file (or to the file for each day). */
+  // also append every line, without colors, to this file or to each day's file
   file?: string | ((day: string) => string);
-  /** Turns a field into what gets logged, at any depth. */
+  // reshapes fields before they are logged
   replacer?: Replacer;
-  /** The clock. Handy for tests. */
+  // the clock, handy for tests
   now?: () => Date;
 }
 
+type Log = (msg: string, fields?: object) => void;
+
 interface Logger {
-  debug(msg: string, fields?: object): void;
-  info(msg: string, fields?: object): void;
-  warn(msg: string, fields?: object): void;
-  error(msg: string, fields?: object): void;
-  /** Logs, then exits with code 1. */
-  fatal(msg: string, fields?: object): never;
-  /** A new logger that adds these fields to every line. */
-  with(fields: object): Logger;
-  /** A new logger with this prefix. */
-  withPrefix(prefix: string): Logger;
-  /** Change the quietest level that gets through. */
-  setLevel(level: Level): void;
+  debug: Log;
+  info: Log;
+  warn: Log;
+  error: Log;
+  // logs, then exits with code 1
+  fatal: (msg: string, fields?: object) => never;
+  // a new logger that adds these fields to every line
+  with: (fields: object) => Logger;
+  // a new logger with this prefix
+  withPrefix: (prefix: string) => Logger;
+  setLevel: (level: Level) => void;
   readonly level: Level;
 }
 
@@ -66,10 +64,17 @@ const levels = {
   fatal: { rank: 4, label: "FTL", color: 134 },
 } as const;
 
-const reset = "\x1b[0m";
+// "debug" | "info" | "warn" | "error" | "fatal", from the table above
+type Level = keyof typeof levels;
+
 const bold = "\x1b[1m";
 const faint = "\x1b[2m";
-const paint = (code: number) => `\x1b[38;5;${code}m`;
+const reset = "\x1b[0m";
+const fg = (code: number) => `\x1b[38;5;${code}m`;
+
+// text in the given styles, or as it is when colors are off
+const paint = (on: boolean, text: string, ...styles: string[]) =>
+  on ? `${styles.join("")}${text}${reset}` : text;
 
 // colors for a terminal; NO_COLOR turns them off, FORCE_COLOR on
 const supportsColor = (output: Writer): boolean => {
@@ -89,6 +94,12 @@ const normalize = (value: unknown): unknown => {
 
   return value;
 };
+
+// the replacer, then normalize: every field passes through this once
+const shaper =
+  (replacer?: Replacer) =>
+  (key: string, value: unknown): unknown =>
+    normalize(replacer ? replacer(key, value) : value);
 
 // a value as text: quoted when it is empty or has spaces, = or quotes
 const formatValue = (value: unknown): string => {
@@ -110,9 +121,10 @@ const formatValue = (value: unknown): string => {
   return String(value);
 };
 
-// the fields as [key, value] pairs: nested objects flattened (a.b=1), empty
-// values left out, the replacer applied at every depth
+// the fields as [key, value] pairs: nested objects flattened (a.b=1) and
+// empty values left out
 const pairs = (fields: object, replacer?: Replacer): [string, unknown][] => {
+  const shape = shaper(replacer);
   const out: [string, unknown][] = [];
   const parents = new Set<object>();
 
@@ -120,21 +132,19 @@ const pairs = (fields: object, replacer?: Replacer): [string, unknown][] => {
     parents.add(node);
 
     for (const [key, raw] of Object.entries(node)) {
-      const value = normalize(replacer ? replacer(key, raw) : raw);
+      const value = shape(key, raw);
       const name = `${path}${key}`;
 
-      if (value === null || value === undefined) continue;
+      if (value == null) continue;
 
       if (Array.isArray(value)) {
         out.push([name, value.filter((v) => v != null).map(normalize)]);
-      } else if (typeof value === "object") {
-        if (parents.has(value)) {
-          out.push([name, "[circular]"]);
-        } else {
-          walk(value, `${name}.`);
-        }
-      } else {
+      } else if (typeof value !== "object") {
         out.push([name, value]);
+      } else if (parents.has(value)) {
+        out.push([name, "[circular]"]);
+      } else {
+        walk(value, `${name}.`);
       }
     }
 
@@ -160,11 +170,9 @@ const makeClock = (timeZone?: string) => {
   });
 
   return (date: Date) => {
-    const p: Record<string, string> = {};
-
-    for (const { type, value } of format.formatToParts(date)) {
-      p[type] = value;
-    }
+    const p = Object.fromEntries(
+      format.formatToParts(date).map(({ type, value }) => [type, value]),
+    );
 
     return {
       day: `${p.year}-${p.month}-${p.day}`,
@@ -173,7 +181,6 @@ const makeClock = (timeZone?: string) => {
   };
 };
 
-/** Make a logger. */
 const createLogger = (options: Options = {}): Logger => {
   const {
     prefix,
@@ -191,7 +198,21 @@ const createLogger = (options: Options = {}): Logger => {
 
   const color = options.color ?? supportsColor(output);
   const clock = makeClock(timeZone);
+  const shape = shaper(replacer);
   const madeDirs = new Set<string>();
+
+  // the fields as plain, nested data for json
+  const toData = (merged: object): object => {
+    try {
+      return JSON.parse(
+        JSON.stringify(merged, (key, value) =>
+          key === "" ? value : shape(key, value),
+        ),
+      );
+    } catch {
+      return Object.fromEntries(pairs(merged, replacer));
+    }
+  };
 
   // one line, without the newline
   const render = (
@@ -202,60 +223,50 @@ const createLogger = (options: Options = {}): Logger => {
     colored: boolean,
   ): string => {
     const merged = { ...fields, ...extra };
+    const meta = {
+      time: date.toISOString(),
+      level,
+      ...(prefix ? { prefix } : {}),
+      msg,
+    };
 
     if (format === "json") {
-      let data: object;
-
-      try {
-        data = JSON.parse(
-          JSON.stringify(merged, (key, value) =>
-            key === "" ? value : normalize(replacer ? replacer(key, value) : value),
-          ),
-        );
-      } catch {
-        data = Object.fromEntries(pairs(merged, replacer));
-      }
-
-      return JSON.stringify({
-        time: date.toISOString(),
-        level,
-        ...(prefix ? { prefix } : {}),
-        msg,
-        ...data,
-      });
+      return JSON.stringify({ ...meta, ...toData(merged) });
     }
 
     const context = pairs(merged, replacer);
 
     if (format === "logfmt") {
-      const head: [string, unknown][] = [
-        ["time", date.toISOString()],
-        ["level", level],
-      ];
-
-      if (prefix) head.push(["prefix", prefix]);
-      head.push(["msg", msg]);
-
-      return [...head, ...context]
+      return [...Object.entries(meta), ...context]
         .map(([key, value]) => `${key}=${formatValue(value)}`)
         .join(" ");
     }
 
     const { label, color: code } = levels[level];
-    const parts: string[] = [];
 
-    if (time) parts.push(clock(date).time);
-    parts.push(colored ? `${bold}${paint(code)}${label}${reset}` : label);
-    if (prefix) parts.push(colored ? `${bold}${prefix}:${reset}` : `${prefix}:`);
-    if (msg) parts.push(msg);
+    return [
+      time && clock(date).time,
+      paint(colored, label, bold, fg(code)),
+      prefix && paint(colored, `${prefix}:`, bold),
+      msg,
+      ...context.map(
+        ([key, value]) => `${paint(colored, key, faint)}=${formatValue(value)}`,
+      ),
+    ]
+      .filter(Boolean)
+      .join(" ");
+  };
 
-    for (const [key, value] of context) {
-      const shown = formatValue(value);
+  // a plain line onto the end of a file, making its folder the first time
+  const append = (path: string, line: string) => {
+    const dir = dirname(path);
 
-      parts.push(colored ? `${faint}${key}${reset}=${shown}` : `${key}=${shown}`);
+    if (!madeDirs.has(dir)) {
+      mkdirSync(dir, { recursive: true });
+      madeDirs.add(dir);
     }
 
-    return parts.join(" ");
+    appendFileSync(path, `${line}\n`);
   };
 
   const write = (level: Level, msg: string, extra?: object) => {
@@ -265,32 +276,34 @@ const createLogger = (options: Options = {}): Logger => {
 
     output.write(`${render(level, msg, extra, date, color)}\n`);
 
-    if (!file) return;
+    if (file) {
+      const path = typeof file === "function" ? file(clock(date).day) : file;
 
-    const path = typeof file === "function" ? file(clock(date).day) : file;
-    const dir = dirname(path);
-
-    if (!madeDirs.has(dir)) {
-      mkdirSync(dir, { recursive: true });
-      madeDirs.add(dir);
+      append(path, render(level, msg, extra, date, false));
     }
-
-    appendFileSync(path, `${render(level, msg, extra, date, false)}\n`);
   };
 
+  const at =
+    (level: Level): Log =>
+    (msg, extra) =>
+      write(level, msg, extra);
+
+  // a new logger like this one, at its current level
+  const child = (overrides: Options) =>
+    createLogger({ ...options, level: threshold, ...overrides });
+
   return {
-    debug: (msg, extra) => write("debug", msg, extra),
-    info: (msg, extra) => write("info", msg, extra),
-    warn: (msg, extra) => write("warn", msg, extra),
-    error: (msg, extra) => write("error", msg, extra),
-    fatal: (msg, extra): never => {
+    debug: at("debug"),
+    info: at("info"),
+    warn: at("warn"),
+    error: at("error"),
+    fatal: (msg, extra) => {
       write("fatal", msg, extra);
 
       return process.exit(1);
     },
-    with: (more) =>
-      createLogger({ ...options, level: threshold, fields: { ...fields, ...more } }),
-    withPrefix: (next) => createLogger({ ...options, level: threshold, prefix: next }),
+    with: (more) => child({ fields: { ...fields, ...more } }),
+    withPrefix: (next) => child({ prefix: next }),
     setLevel: (level) => {
       threshold = level;
     },
@@ -300,7 +313,7 @@ const createLogger = (options: Options = {}): Logger => {
   };
 };
 
-/** A ready-made logger: info and up, to stderr. */
+// a ready-made logger: info and up, to stderr
 const log = createLogger();
 
 export {
