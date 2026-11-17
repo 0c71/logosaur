@@ -3,11 +3,12 @@
 [![npm](https://img.shields.io/npm/v/logosaur?color=af5fd7)](https://www.npmjs.com/package/logosaur)
 [![CI](https://github.com/0c71/logosaur/actions/workflows/ci.yml/badge.svg)](https://github.com/0c71/logosaur/actions/workflows/ci.yml)
 ![License: MIT](https://img.shields.io/badge/license-MIT-5fffd7)
-![Dependencies: 0](https://img.shields.io/badge/dependencies-0-d7ff87)
+![Dependencies: zero](https://img.shields.io/badge/dependencies-zero-d7ff87)
 ![Built for Bun](https://img.shields.io/badge/built%20for-bun-ff5f87)
 
-A tiny, colorful, structured logger for Bun and TypeScript.
-Short Go-style levels, `key=value` fields and zero dependencies. Rawr.
+A tiny, colorful, structured logger for Bun and TypeScript, with
+**zero dependencies**. Short Go-style levels, `key=value` fields, and nothing
+else dragged into your `node_modules`. Rawr.
 
 ![logosaur output in a terminal](assets/demo.svg)
 
@@ -18,6 +19,10 @@ bun add logosaur
 ```
 
 It works in Node too: `npm install logosaur`.
+
+That's the whole install. logosaur has **zero dependencies**, so it's one small
+package (about 5 kB) and nothing else: no tree of transitive installs, nothing
+to audit but the one file. 🦴
 
 ## Usage
 
