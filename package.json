@@ -1,0 +1,45 @@
+{
+  "name": "logosaur",
+  "version": "0.1.0",
+  "description": "A tiny, colorful, zero-dependency structured logger for Bun and TypeScript. Rawr.",
+  "keywords": [
+    "log",
+    "logger",
+    "logging",
+    "structured",
+    "logfmt",
+    "bun",
+    "typescript",
+    "color"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0c71/logosaur.git"
+  },
+  "homepage": "https://github.com/0c71/logosaur#readme",
+  "bugs": "https://github.com/0c71/logosaur/issues",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target node && tsc -p tsconfig.build.json",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "bun run typecheck && bun test && bun run build"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "typescript": "^7.0.2"
+  }
+}
